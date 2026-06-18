@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Verify Your Email — InsightDocs AI</title>
+<meta name="description" content="Enter the 6-digit OTP sent to your email to activate your InsightDocs AI account."/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="auth-style.css"/>
+<script src="auth-helper.js"></script>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">✦</div>
+    <div>
+      <div class="logo-text">InsightDocs AI</div>
+      <div class="logo-tag">RAG-Powered Knowledge Assistant</div>
+    </div>
+  </div>
+
+  <div class="shield-wrap"><div class="shield">🛡️</div></div>
+  <h1>Verify your email</h1>
+  <p class="sub">We sent a 6-digit code to</p>
+  <div class="email-tag">📧 <span id="email-display">your email</span></div>
+  <div style="font-size:11.5px;color:var(--warn);margin-bottom:18px;text-align:center;line-height:1.45;background:rgba(251,191,36,0.06);border:1px dashed rgba(251,191,36,0.2);border-radius:10px;padding:8px 12px">⚠️ Please check your <strong>Spam / Junk folder</strong> if you don't receive the OTP code in 1 minute.</div>
+
+  <div class="msg-box hidden" id="msg-box"></div>
+
+  <!-- OTP digit inputs -->
+  <div class="otp-row" id="otp-row">
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d0" autocomplete="one-time-code" aria-label="OTP digit 1"/>
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d1" aria-label="OTP digit 2"/>
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d2" aria-label="OTP digit 3"/>
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d3" aria-label="OTP digit 4"/>
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d4" aria-label="OTP digit 5"/>
+    <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="d5" aria-label="OTP digit 6"/>
+  </div>
+
+  <!-- OTP expiry timer -->
+  <div class="timer-row">
+    <span>⏱ Code expires in</span>
+    <span class="timer-badge" id="timer-badge">10:00</span>
+  </div>
+
+  <!-- Attempts indicator (5 dots) -->
+  <div class="attempts-row" id="attempts-row">
+    <div class="attempt-dot ok" id="a0" title="Attempt 1"></div>
+    <div class="attempt-dot ok" id="a1" title="Attempt 2"></div>
+    <div class="attempt-dot ok" id="a2" title="Attempt 3"></div>
+    <div class="attempt-dot ok" id="a3" title="Attempt 4"></div>
+    <div class="attempt-dot ok" id="a4" title="Attempt 5"></div>
+  </div>
+
+  <button class="btn" id="verify-btn" onclick="handleVerify()">
+    <div class="spinner"></div>
+    <span class="btn-text">Verify Email ✓</span>
+  </button>
+
+  <div class="resend-row">
+    Didn't receive it?&nbsp;
+    <button class="resend-btn" id="resend-btn" onclick="handleResend()" disabled>
+      Resend OTP
+    </button>
+    <span class="countdown" id="resend-countdown"> (60s)</span>
+  </div>
+
+  <div class="divider">or</div>
+  <div class="back-link">
+    Wrong email? <a href="register.html">Go back to register</a>
+  </div>
+</div>
+
+<script>
+const params       = new URLSearchParams(window.location.search);
+const pendingEmail = params.get('email') || sessionStorage.getItem('pendingEmail') || '';
+const otpAction    = params.get('action') || 'register';
+
+if (pendingEmail) {
+  document.getElementById('email-display').textContent = pendingEmail;
+  sessionStorage.setItem('pendingEmail', pendingEmail);
+} else {
+  window.location.href = 'register.html';
+}
+
+let attemptsUsed   = 0;
+let timerInterval  = null;
+let resendInterval = null;
+
+// Start OTP Expiry Timer (10 minutes)
+timerInterval = startOtpTimer(600, 'timer-badge', () => {
+  showMsg('Your OTP has expired. Please request a new one.', 'error');
+});
+
+// Start Resend cooldown (60 seconds)
+resendInterval = startResendCooldown(60, 'resend-btn', 'resend-countdown');
+
+// Setup OTP Inputs
+const digits = initOtpInputs('otp-digit', handleVerify);
+
+function getOtp()     { return digits.map(d => d.value).join(''); }
+
+function setDigitState(state) {
+  digits.forEach(d => {
+    d.classList.remove('error', 'success');
+    if (state) d.classList.add(state);
+  });
+}
+
+function markAttemptUsed() {
+  if (attemptsUsed < 5) {
+    document.getElementById('a' + attemptsUsed).classList.replace('ok', 'used');
+    attemptsUsed++;
+  }
+}
+
+function hideMsg() {
+  document.getElementById('msg-box').style.display = 'none';
+}
+
+async function handleVerify() {
+  const otp = getOtp();
+  if (otp.length !== 6) { showMsg('Please enter all 6 digits.', 'error'); return; }
+
+  const btn = document.getElementById('verify-btn');
+  btn.classList.add('loading'); btn.disabled = true;
+  hideMsg();
+
+  try {
+    const res  = await fetch('/api/auth?action=verify-otp', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: pendingEmail, otp, otpAction }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setDigitState('error');
+      markAttemptUsed();
+      showMsg(data.error || 'Verification failed.', 'error');
+      setTimeout(() => { 
+        setDigitState(''); 
+        digits.forEach(d => { d.value = ''; d.classList.remove('filled'); }); 
+        digits[0].focus(); 
+      }, 1000);
+      return;
+    }
+
+    // SUCCESS
+    setDigitState('success');
+    clearInterval(timerInterval);
+    showMsg(data.message || 'Verification successful!', 'success');
+    sessionStorage.removeItem('pendingEmail');
+    localStorage.setItem('ragToken', data.token);
+    localStorage.setItem('ragUser', JSON.stringify(data.user));
+    setTimeout(() => window.location.href = 'app.html', 1200);
+
+  } catch (err) {
+    showMsg('Network error. Please try again.', 'error');
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+  }
+}
+
+async function handleResend() {
+  const btn = document.getElementById('resend-btn');
+  btn.disabled = true;
+  hideMsg();
+
+  try {
+    const res  = await fetch('/api/auth?action=resend-otp', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: pendingEmail, otpAction }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showMsg(data.error || 'Failed to resend OTP.', 'error');
+      btn.disabled = false;
+      return;
+    }
+
+    showMsg('📧 New OTP sent! Check your inbox (and Spam folder).', 'info');
+    digits.forEach(d => { d.value = ''; d.classList.remove('filled', 'error', 'success'); });
+    digits[0].focus();
+    
+    clearInterval(timerInterval);
+    timerInterval = startOtpTimer(600, 'timer-badge');
+    resendInterval = startResendCooldown(60, 'resend-btn', 'resend-countdown');
+    
+    attemptsUsed = 0;
+    for (let i = 0; i < 5; i++) {
+      const dot = document.getElementById('a' + i);
+      if (dot) {
+        dot.classList.remove('used');
+        dot.classList.add('ok');
+      }
+    }
+
+  } catch (err) {
+    showMsg('Network error. Please try again.', 'error');
+    btn.disabled = false;
+  }
+}
+</script>
+</script>
+</body>
+</html>
