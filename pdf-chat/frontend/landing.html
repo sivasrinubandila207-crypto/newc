@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InsightDocs AI — Chat with Your Documents</title>
+  <meta name="description" content="Upload PDFs and instantly chat with them using AI. Powered by Gemini & Groq. Free to start." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #060912;
+      --bg2:      #0b0f1e;
+      --surface:  rgba(255,255,255,.04);
+      --border:   rgba(139,92,246,.18);
+      --accent:   #818cf8;
+      --purple:   #8b5cf6;
+      --pink:     #ec4899;
+      --teal:     #22d3ee;
+      --text1:    #f1f5ff;
+      --text2:    #94a3b8;
+      --text3:    #64748b;
+      --radius:   16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text1);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background orbs ── */
+    .bg-orbs {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      overflow: hidden;
+    }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: .35;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+    .orb1 { width:520px; height:520px; background:radial-gradient(circle,#8b5cf6,transparent); top:-120px; left:-100px; animation-duration:14s; }
+    .orb2 { width:400px; height:400px; background:radial-gradient(circle,#ec4899,transparent); bottom:-100px; right:-80px; animation-duration:10s; animation-delay:-4s; }
+    .orb3 { width:300px; height:300px; background:radial-gradient(circle,#22d3ee,transparent); top:50%; left:55%; animation-duration:16s; animation-delay:-8s; }
+    @keyframes drift { from{transform:translate(0,0) scale(1)} to{transform:translate(30px,20px) scale(1.08)} }
+
+    /* ── Navbar ── */
+    nav {
+      position: fixed; top:0; left:0; right:0; z-index:100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(6,9,18,.7);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Inter', sans-serif; font-weight: 800; font-size: 1.1rem;
+      color: var(--text1); text-decoration: none;
+    }
+    .logo-icon {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .nav-links { display: flex; align-items: center; gap: 12px; }
+    .btn-ghost {
+      padding: 8px 20px; border-radius: 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text2); font-size: .9rem; font-family: 'Inter', sans-serif;
+      cursor: pointer; text-decoration: none; transition: all .2s;
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--text1); background: rgba(129,140,248,.08); }
+    .btn-primary {
+      padding: 9px 22px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      color: #fff; font-size: .9rem; font-weight: 600; font-family: 'Inter', sans-serif;
+      cursor: pointer; text-decoration: none; transition: all .2s;
+      box-shadow: 0 4px 18px rgba(139,92,246,.35);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(139,92,246,.5); }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 24px 60px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(139,92,246,.1);
+      font-size: .78rem; color: var(--accent); font-weight: 500; letter-spacing: .04em;
+      margin-bottom: 28px;
+      animation: fadeUp .6s ease both;
+    }
+    .hero-badge span { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .hero h1 {
+      font-family: 'Inter', sans-serif; font-weight: 800;
+      font-size: clamp(1.8rem, 5.5vw, 3.8rem);
+      line-height: 1.12; letter-spacing: -.02em;
+      margin-bottom: 20px;
+      animation: fadeUp .7s .1s ease both;
+    }
+    .grad { background: linear-gradient(135deg, var(--accent), var(--purple), var(--pink)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+    .hero p {
+      font-size: clamp(0.95rem, 2vw, 1.2rem); color: var(--text2);
+      max-width: 580px; line-height: 1.7; margin-bottom: 40px;
+      animation: fadeUp .7s .2s ease both;
+    }
+    .hero-ctas {
+      display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+      animation: fadeUp .7s .3s ease both;
+    }
+    .btn-hero-primary {
+      padding: 14px 32px; border-radius: 12px; border: none;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      color: #fff; font-size: 1rem; font-weight: 600; font-family: 'Inter', sans-serif;
+      cursor: pointer; text-decoration: none; transition: all .25s;
+      box-shadow: 0 6px 28px rgba(139,92,246,.4);
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 36px rgba(139,92,246,.55); }
+    .btn-hero-ghost {
+      padding: 14px 32px; border-radius: 12px;
+      border: 1px solid rgba(139,92,246,.35);
+      background: rgba(139,92,246,.08);
+      color: var(--text1); font-size: 1rem; font-weight: 500; font-family: 'Inter', sans-serif;
+      cursor: pointer; text-decoration: none; transition: all .25s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-hero-ghost:hover { border-color: var(--accent); background: rgba(129,140,248,.15); transform: translateY(-1px); }
+
+    /* ── Preview card ── */
+    .hero-preview {
+      margin-top: 64px; width: 100%; max-width: 840px;
+      animation: fadeUp .8s .4s ease both;
+      position: relative;
+    }
+    .preview-glow {
+      position: absolute; inset: -1px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--purple), var(--pink), var(--teal));
+      opacity: .35; filter: blur(8px);
+    }
+    .preview-card {
+      position: relative; z-index: 1;
+      background: var(--bg2); border-radius: 18px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .preview-topbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 18px;
+      background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border);
+    }
+    .dot { width:11px; height:11px; border-radius:50%; }
+    .dot.r{background:#ff5f57} .dot.y{background:#febc2e} .dot.g{background:#28c840}
+    .preview-title { font-size:.8rem; color:var(--text3); margin-left:8px; }
+    .preview-body {
+      display: flex; min-height: 260px;
+    }
+    .preview-sidebar {
+      width: 200px; border-right: 1px solid var(--border);
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .sidebar-label { font-size:.68rem; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+    .doc-chip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: rgba(129,140,248,.1); border: 1px solid rgba(129,140,248,.2);
+      font-size:.75rem; color:var(--text2);
+    }
+    .doc-chip.active { background:rgba(139,92,246,.18); border-color:rgba(139,92,246,.4); color:var(--text1); }
+    .preview-chat {
+      flex:1; padding:16px; display:flex; flex-direction:column; gap:12px; justify-content:flex-end;
+    }
+    .bubble {
+      padding: 10px 14px; border-radius: 12px; font-size:.8rem; line-height:1.5; max-width:85%;
+    }
+    .bubble.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, rgba(139,92,246,.4), rgba(236,72,153,.3));
+      border: 1px solid rgba(139,92,246,.35); color: var(--text1);
+    }
+    .bubble.ai {
+      align-self: flex-start;
+      background: rgba(255,255,255,.05); border: 1px solid var(--border); color:var(--text2);
+    }
+    .typing { display:flex; gap:4px; padding:10px 14px; }
+    .typing span { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:bounce .9s infinite; }
+    .typing span:nth-child(2){animation-delay:.15s} .typing span:nth-child(3){animation-delay:.3s}
+    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+    /* ── Features ── */
+    .features {
+      position: relative; z-index: 1;
+      padding: 80px 24px;
+      max-width: 1100px; margin: 0 auto;
+    }
+    .section-label {
+      text-align:center; font-size:.78rem; color:var(--accent); font-weight:600;
+      letter-spacing:.12em; text-transform:uppercase; margin-bottom:16px;
+    }
+    .section-title {
+      font-family: 'Inter', sans-serif; font-weight: 800;
+      font-size: clamp(1.8rem, 4vw, 2.6rem); text-align: center;
+      margin-bottom: 16px; line-height: 1.2;
+    }
+    .section-sub { text-align:center; color:var(--text2); max-width:520px; margin:0 auto 56px; line-height:1.6; }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 24px;
+      transition: all .25s; position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content:''; position:absolute; inset:0; border-radius:var(--radius);
+      background: linear-gradient(135deg, rgba(139,92,246,.06), transparent);
+      opacity:0; transition:.25s;
+    }
+    .feature-card:hover { border-color:rgba(139,92,246,.45); transform:translateY(-4px); box-shadow:0 20px 40px rgba(0,0,0,.4); }
+    .feature-card:hover::before { opacity:1; }
+    .feature-icon {
+      width:48px; height:48px; border-radius:14px; margin-bottom:18px;
+      display:flex; align-items:center; justify-content:center; font-size:22px;
+      background: linear-gradient(135deg, rgba(139,92,246,.2), rgba(236,72,153,.12));
+      border: 1px solid rgba(139,92,246,.25);
+    }
+    .feature-card h3 { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 1.05rem; margin-bottom: 10px; }
+    .feature-card p { color:var(--text2); font-size:.88rem; line-height:1.65; }
+
+    /* ── Stats ── */
+    .stats {
+      position: relative; z-index: 1;
+      padding: 60px 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .stat { text-align:center; }
+    .stat-num {
+      font-family: 'Inter', sans-serif; font-weight: 800;
+      font-size: 2.4rem; background: linear-gradient(135deg, var(--accent), var(--pink));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+    .stat-label { color:var(--text2); font-size:.85rem; margin-top:4px; }
+
+    /* ── CTA Banner ── */
+    .cta-banner {
+      position:relative; z-index:1;
+      margin:0 auto 80px; max-width:800px; padding:0 24px;
+    }
+    .cta-inner {
+      background: linear-gradient(135deg, rgba(139,92,246,.15), rgba(236,72,153,.1));
+      border: 1px solid rgba(139,92,246,.3);
+      border-radius: 24px; padding: 56px 40px; text-align:center;
+      position:relative; overflow:hidden;
+    }
+    .cta-inner::after {
+      content:'✦'; position:absolute; font-size:120px; color:rgba(139,92,246,.06);
+      top:-20px; right:-20px; pointer-events:none;
+    }
+    .cta-inner h2 { font-family: 'Inter', sans-serif; font-weight: 800; font-size: clamp(1.6rem, 4vw, 2.2rem); margin-bottom: 12px; }
+    .cta-inner p { color:var(--text2); margin-bottom:32px; }
+    .cta-btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+
+    /* ── Footer ── */
+    footer {
+      position:relative; z-index:1;
+      text-align:center; padding:28px 24px;
+      border-top:1px solid var(--border);
+      color:var(--text3); font-size:.82rem;
+    }
+    footer a { color:var(--accent); text-decoration:none; }
+
+    @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+    @media(max-width:768px) {
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+      }
+    }
+
+    @media(max-width:640px) {
+      nav { padding:14px 18px; }
+      .preview-sidebar { display:none; }
+      .cta-inner { padding:36px 20px; }
+    }
+
+    @media(max-width:480px) {
+      nav .btn-ghost {
+        display: none;
+      }
+      .hero-ctas {
+        flex-direction: column;
+        width: 100%;
+        padding: 0 16px;
+      }
+      .btn-hero-primary, .btn-hero-ghost {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Background -->
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<!-- Navbar -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="logo-icon">✦</div>
+    InsightDocs AI
+  </a>
+  <div class="nav-links">
+    <a class="btn-ghost" href="login.html" id="nav-signin">Sign In</a>
+    <a class="btn-primary" href="register.html" id="nav-start">Start Free</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">
+    <span></span> Powered by Gemini &amp; Groq AI
+  </div>
+
+  <h1>Chat with your documents<br><span class="grad">intelligently.</span></h1>
+
+  <p>Upload any PDF and instantly ask questions, extract insights, and discover answers — no copying, no searching, just conversation.</p>
+
+  <div style="margin-top: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.08em; margin-bottom: 15px;">Select Your Study Mode:</div>
+  <div class="hero-ctas">
+    <a class="btn-hero-primary" href="app.html" id="cta-rag">
+      🤖 PDF RAG Assistant
+    </a>
+    <a class="btn-hero-primary" href="notes.html" id="cta-notes" style="background: linear-gradient(135deg, var(--pink), var(--teal)); box-shadow: 0 6px 28px rgba(34,211,238,.3);">
+      ✍️ AI Notes Generator
+    </a>
+  </div>
+  <div style="margin-top: 20px;" id="signin-wrapper">
+    <a class="btn-ghost" href="login.html" id="cta-signin">Sign In to Account</a>
+  </div>
+
+  <!-- Animated preview card -->
+  <div class="hero-preview">
+    <div class="preview-glow"></div>
+    <div class="preview-card">
+      <div class="preview-topbar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <span class="preview-title">InsightDocs AI — Chat Interface</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar">
+          <div class="sidebar-label">📄 Documents</div>
+          <div class="doc-chip active">📑 Research_Paper.pdf</div>
+          <div class="doc-chip">📋 Report_Q4.pdf</div>
+          <div class="doc-chip">📘 Manual_v3.pdf</div>
+        </div>
+        <div class="preview-chat">
+          <div class="bubble user">What are the key findings in section 3?</div>
+          <div class="bubble ai">Section 3 highlights three major findings: improved accuracy by 23%, reduced processing time by 40%, and a significant reduction in false positives compared to the baseline model...</div>
+          <div class="bubble user">Summarise the conclusion</div>
+          <div class="typing"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat"><div class="stat-num">10+</div><div class="stat-label">File Formats</div></div>
+  <div class="stat"><div class="stat-num">∞</div><div class="stat-label">Questions per doc</div></div>
+  <div class="stat"><div class="stat-num">&lt;2s</div><div class="stat-label">Average response</div></div>
+  <div class="stat"><div class="stat-num">100%</div><div class="stat-label">Private &amp; Secure</div></div>
+</div>
+
+<!-- Features -->
+<section class="features">
+  <div class="section-label">Why InsightDocs AI</div>
+  <h2 class="section-title">Everything you need to<br><span class="grad">understand your documents</span></h2>
+  <p class="section-sub">From scanned images to complex multi-page PDFs — our AI extracts, indexes, and answers with precision.</p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🔍</div>
+      <h3>Smart RAG Search</h3>
+      <p>Semantic vector search finds exactly the relevant sections — not just keyword matches — across all your uploaded documents.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">👁</div>
+      <h3>Vision OCR</h3>
+      <p>Scanned PDFs, images, and handwritten notes? Gemini Vision extracts text with high accuracy for documents without selectable text.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📂</div>
+      <h3>Multi-Document</h3>
+      <p>Upload and chat across multiple PDFs simultaneously. Compare, contrast, and synthesise information from all your sources at once.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💬</div>
+      <h3>Chat History</h3>
+      <p>All your sessions are saved to the cloud. Pick up any conversation exactly where you left off, from any device.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Multiple AI Models</h3>
+      <p>Choose between Gemini Flash, Groq Llama, and more. Auto-rotates API keys to ensure zero downtime even when quotas are hit.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⭐</div>
+      <h3>Favourites &amp; Export</h3>
+      <p>Star the best AI answers, export chat sessions, and build a personal knowledge base from your document conversations.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA Banner -->
+<div class="cta-banner">
+  <div class="cta-inner">
+    <h2>Ready to talk to your documents?</h2>
+    <p>Free to start. No credit card required.</p>
+    <div class="cta-btns">
+      <a class="btn-hero-primary" href="register.html">🚀 Create Free Account</a>
+      <a class="btn-hero-ghost" href="login.html">Sign In</a>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <p>© 2026 InsightDocs AI · Built by BSS · <a href="login.html">Sign In</a> · <a href="register.html">Register</a></p>
+</footer>
+
+<script>
+  // If already logged in, redirect to the app
+  (function () {
+    const token = localStorage.getItem('ragToken');
+    if (!token) {
+      const ctaRag = document.getElementById('cta-rag');
+      if (ctaRag) ctaRag.href = 'register.html';
+      return;
+    }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.exp > Date.now() / 1000) {
+        // Show "Go to App" in nav instead
+        const navLinks = document.querySelector('.nav-links');
+        if (navLinks) {
+          navLinks.innerHTML = `<a class="btn-primary" href="app.html">Open App →</a>`;
+        }
+        // Hide signin link
+        const signinWrapper = document.getElementById('signin-wrapper');
+        if (signinWrapper) signinWrapper.style.display = 'none';
+      } else {
+        localStorage.removeItem('ragToken');
+        const ctaRag = document.getElementById('cta-rag');
+        if (ctaRag) ctaRag.href = 'register.html';
+      }
+    } catch {
+      localStorage.removeItem('ragToken');
+      const ctaRag = document.getElementById('cta-rag');
+      if (ctaRag) ctaRag.href = 'register.html';
+    }
+  })();
+</script>
+
+</body>
+</html>
