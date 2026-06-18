@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InsightDocs AI — RAG-Powered Multi-Document Knowledge Assistant</title>
+  <meta name="description" content="InsightDocs AI — RAG-Powered Multi-Document Knowledge Assistant" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="index.css?v=1.0.1" />
+</head>
+
+<body>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Shortcuts Modal -->
+  <div class="modal-overlay" id="shortcuts-modal" onclick="if(event.target===this)closeShortcuts()">
+    <div class="modal">
+      <div class="modal-title">⌨ Keyboard Shortcuts</div>
+      <div class="shortcut-row"><span class="shortcut-desc">Send message</span>
+        <div class="shortcut-keys"><span class="key">Enter</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">New line</span>
+        <div class="shortcut-keys"><span class="key">Shift</span><span class="key">Enter</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Search in chat</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">F</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Show shortcuts</span>
+        <div class="shortcut-keys"><span class="key">?</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Toggle theme</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">D</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Clear chat</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">L</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Export chat</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">E</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Save session</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">S</span></div>
+      </div>
+      <div class="shortcut-row"><span class="shortcut-desc">Print chat</span>
+        <div class="shortcut-keys"><span class="key">Ctrl</span><span class="key">P</span></div>
+      </div>
+      <button class="modal-close" onclick="closeShortcuts()">Close</button>
+    </div>
+  </div>
+
+  <!-- Page Viewer Modal -->
+  <div class="page-modal" id="page-modal" onclick="if(event.target===this)closePageModal()">
+    <div class="page-modal-box">
+      <div class="page-modal-title">
+        <button class="page-modal-nav" id="page-modal-prev" onclick="navigatePageModal(-1)" title="Previous page (←)">‹</button>
+        <span id="page-modal-title">PDF Page</span>
+        <button class="page-modal-nav" id="page-modal-next" onclick="navigatePageModal(1)" title="Next page (→)">›</button>
+        <button class="page-modal-close" onclick="closePageModal()">✕</button>
+      </div>
+      <div class="page-canvas-wrap" id="page-canvas-wrap"></div>
+    </div>
+  </div>
+
+  <!-- Fav Preview Modal -->
+  <div class="modal-overlay" id="fav-modal" onclick="if(event.target===this)closeFavModal()">
+    <div class="modal" style="max-width:600px;width:90%;max-height:80vh;overflow-y:auto">
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px">⭐ <span id="fav-modal-date"></span></div>
+      <div id="fav-modal-body" style="margin-top:12px;line-height:1.8;color:var(--text);font-size:14px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="modal-close" style="flex:1" onclick="copyFavModal()">📋 Copy</button>
+        <button class="modal-close" style="flex:1;background:linear-gradient(135deg,#dc2626,#9f1239)"
+          onclick="closeFavModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Tabs -->
+  <div class="mobile-tabs">
+    <button class="mobile-tab" id="mob-tab-docs" onclick="mobileTab('docs')">📄 Docs</button>
+    <button class="mobile-tab active" id="mob-tab-chat" onclick="mobileTab('chat')">💬 Chat</button>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="logo-area">
+      <div class="logo">
+        <div class="logo-icon">✦</div>
+        <span class="logo-text">InsightDocs AI</span>
+        <span class="logo-badge" id="doc-badge"></span>
+      </div>
+    </div>
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" onclick="switchSidebarTab('docs')">📄 Docs</button>
+      <button class="sidebar-tab" onclick="switchSidebarTab('history')">🕓 History</button>
+      <button class="sidebar-tab" onclick="switchSidebarTab('stats')">📊 Stats</button>
+      <button class="sidebar-tab" onclick="switchSidebarTab('favs')">⭐ Favs</button>
+      <button class="sidebar-tab" onclick="switchSidebarTab('debug')">⚙️ Debug</button>
+    </div>
+
+    <!-- Docs -->
+    <div class="sidebar-panel active" id="sp-docs">
+      <input type="file" id="file-input" accept=".pdf" multiple style="display:none"
+        onchange="handleFiles(this.files)" />
+      <div class="upload-zone" id="upload-zone" ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <div class="upload-icon-wrap" id="upload-icon-wrap">📄</div>
+        <div id="upload-status">
+          <div class="upload-title">Upload your PDFs</div>
+          <div class="upload-sub">Drag &amp; drop or click below</div>
+        </div>
+        <label for="file-input" class="upload-btn" style="margin-top:4px;cursor:pointer">↑ Choose PDF</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;margin-bottom:2px;padding:0 4px">
+        <input type="checkbox" id="table-ocr-checkbox"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncTableOcrMode(this.checked)" checked />
+        <label for="table-ocr-checkbox"
+          style="font-size:11px;color:var(--accent2);font-weight:600;cursor:pointer;user-select:none">⚡ Table OCR
+          Mode</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;padding:0 4px">
+        <input type="checkbox" id="force-ocr-checkbox"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncForceOcr(this.checked)" />
+        <label for="force-ocr-checkbox" style="font-size:11px;color:var(--text2);cursor:pointer;user-select:none">Force
+          OCR (all pages)</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;padding:0 4px">
+        <input type="checkbox" id="vision-ocr-checkbox"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncVisionOcr(this.checked)" />
+        <label for="vision-ocr-checkbox"
+          style="font-size:11px;color:var(--accent3);font-weight:600;cursor:pointer;user-select:none">👁 Vision OCR Mode
+          (Single-Page)</label>
+      </div>
+      <div
+        style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;margin-bottom:6px;padding-right:2px">
+        <div class="section-label" style="margin:0;flex:1">Loaded Documents</div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <button id="toggle-all-docs" class="toggle-all-btn" onclick="toggleAllDocs()" style="display:none">Deselect
+            All</button>
+          <button id="delete-all-docs-btn" class="delete-all-btn" onclick="deleteAllDocs()" style="display:none"
+            title="Delete all documents from cloud">🗑 All</button>
+        </div>
+      </div>
+      <div id="docs-list">
+        <div class="no-docs">No documents loaded yet</div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="sidebar-panel" id="sp-history">
+      <div class="section-label">Saved Sessions</div>
+      <div id="history-list">
+        <div class="no-docs">No saved sessions yet</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="sidebar-panel" id="sp-stats">
+      <div class="section-label">Current Chat</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="doc-item" style="flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span
+              style="font-size:11px;color:var(--text3)">Messages</span><span
+              style="font-size:12px;font-weight:600;color:var(--text)" id="stat-msgs">0</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">Your
+              messages</span><span style="font-size:12px;font-weight:600;color:var(--text)" id="stat-user">0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">AI
+              responses</span><span style="font-size:12px;font-weight:600;color:var(--text)" id="stat-ai">0</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">Total
+              words</span><span style="font-size:12px;font-weight:600;color:var(--text)" id="stat-words">0</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">Est.
+              tokens</span><span style="font-size:12px;font-weight:600;color:var(--accent3)" id="stat-tokens">0</span>
+          </div>
+        </div>
+        <div class="section-label">Documents</div>
+        <div class="doc-item" style="flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">Files
+              loaded</span><span style="font-size:12px;font-weight:600;color:var(--text)" id="stat-docs">0</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">Total
+              pages</span><span style="font-size:12px;font-weight:600;color:var(--text)" id="stat-pages">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Favorites -->
+    <div class="sidebar-panel" id="sp-favs">
+      <div class="section-label">Starred Messages</div>
+      <div id="favs-list">
+        <div class="no-docs">No starred messages yet.<br />Click ⭐ on any AI response to save it.</div>
+      </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div class="sidebar-panel" id="sp-debug">
+      <div class="section-label">Diagnostic Console</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;margin-bottom:2px;padding:0 4px">
+        <input type="checkbox" id="table-ocr-debug"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncTableOcrMode(this.checked)" checked />
+        <label for="table-ocr-debug"
+          style="font-size:11px;color:var(--accent2);font-weight:600;cursor:pointer;user-select:none">⚡ Table OCR
+          Mode</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;padding:0 4px">
+        <input type="checkbox" id="force-ocr-debug"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncForceOcr(this.checked)" />
+        <label for="force-ocr-debug" style="font-size:11px;color:var(--text2);cursor:pointer;user-select:none">Force OCR
+          (all pages)</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;padding:0 4px">
+        <input type="checkbox" id="vision-ocr-debug"
+          style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent)"
+          onchange="syncVisionOcr(this.checked)" />
+        <label for="vision-ocr-debug"
+          style="font-size:11px;color:var(--accent3);font-weight:600;cursor:pointer;user-select:none">👁 Vision OCR Mode
+          (Single-Page)</label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;margin-bottom:8px;padding:0 4px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--text2)">OCR Preprocess</span>
+          <select id="ocr-preprocess-select" class="toolbar-select"
+            style="font-size:11px;padding:2px 4px;max-width:140px">
+            <option value="binarize" selected>Binarize (Threshold)</option>
+            <option value="grayscale">Grayscale Only</option>
+            <option value="none">None (Raw Render)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--text2)">Tesseract PSM</span>
+          <select id="ocr-psm-select" class="toolbar-select" style="font-size:11px;padding:2px 4px;max-width:140px">
+            <option value="3">3 - Auto (Default)</option>
+            <option value="6">6 - Single Block</option>
+            <option value="11" selected>11 - Sparse Text</option>
+            <option value="12">12 - Sparse + OSD</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--text2)">OCR Render Scale</span>
+          <select id="ocr-scale-select" class="toolbar-select" style="font-size:11px;padding:2px 4px;max-width:140px">
+            <option value="1.5">1.5x</option>
+            <option value="2.0">2.0x</option>
+            <option value="2.5">2.5x</option>
+            <option value="3.0" selected>3.0x (Default)</option>
+            <option value="4.0">4.0x (High-Res)</option>
+          </select>
+        </div>
+      </div>
+      <div id="debug-totals" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+        <div class="no-docs">No active document metrics. Upload a PDF first.</div>
+      </div>
+      <div id="debug-roll-numbers" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
+        <!-- Roll numbers go here -->
+      </div>
+      <div class="section-label">Retrieval Statistics</div>
+      <div id="debug-retrieved-stats"
+        style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;padding:0 4px">
+        <div style="font-size:11px;color:var(--text3);font-style:italic">No query stats available. Submit a question
+          first.</div>
+      </div>
+      <div class="section-label">Retrieved Chunks</div>
+      <div id="debug-retrieved-chunks"
+        style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;padding:0 4px">
+        <div style="font-size:11px;color:var(--text3);font-style:italic">No chunks retrieved yet.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        <button id="show-gemini-context-btn" class="upload-btn" style="margin:0;cursor:pointer"
+          onclick="showGeminiContext()">🔍 Show Gemini Context</button>
+        <button id="run-ocr-benchmark-btn" class="upload-btn"
+          style="margin:0;background:linear-gradient(135deg,#d97706,#b45309);cursor:pointer"
+          onclick="runOcrBenchmark()">📊 Run OCR Benchmark (Page 2)</button>
+      </div>
+      <div class="section-label">Page Breakdown</div>
+      <div id="debug-pages-list"
+        style="display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;padding-right:4px;margin-top:4px">
+        <!-- Individual page details go here -->
+      </div>
+    </div>
+
+    <!-- Usage -->
+    <div class="usage-panel">
+      <div class="usage-title">API Usage <span class="usage-reset" id="usage-reset">Resets at midnight</span></div>
+      <div>
+        <div class="usage-label-row">
+          <span class="usage-label">Daily Requests</span>
+          <span class="usage-count" id="usage-count" onclick="manualSetUsage()">0 <span>/ 14,400</span></span>
+        </div>
+        <div class="usage-bar">
+          <div class="usage-fill" id="usage-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="usage-chips">
+        <div class="uc">
+          <div class="uc-val">30</div>
+          <div class="uc-lbl">Req/min</div>
+        </div>
+        <div class="uc">
+          <div class="uc-val">6K</div>
+          <div class="uc-lbl">Tok/min</div>
+        </div>
+        <div class="uc">
+          <div class="uc-val">Free</div>
+          <div class="uc-lbl">Plan</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="ai-badge">
+        <div class="ai-dot"></div><span id="model-badge">Llama 3.3 70B · Groq</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <div class="avatar ai" style="width:26px;height:26px;font-size:11px;border-radius:7px">✦</div>
+        <div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="chat-header-title">AI Assistant</div>
+            <div class="status-dot online" id="status-dot" title="Online"></div>
+          </div>
+          <div class="chat-header-sub" id="header-sub">Upload a PDF to get started</div>
+        </div>
+      </div>
+      <div class="chat-header-right" style="position:relative">
+        <button class="header-btn" onclick="toggleSearch()" id="search-btn" title="Search chat">🔍</button>
+        <button class="header-btn desktop-only" onclick="printChat()" title="Print chat">🖨</button>
+        <button class="header-btn desktop-only" onclick="exportChat()" title="Export chat">💾 Export</button>
+        <button class="header-btn desktop-only" onclick="saveSession()" title="Save session">📌 Save</button>
+        <button class="header-btn desktop-only" onclick="clearChat()" title="Clear chat">🗑 Clear</button>
+        <button class="header-btn desktop-only" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">☀️</button>
+        <button class="header-btn desktop-only" onclick="openShortcuts()" title="Keyboard shortcuts">⌨</button>
+        <a class="header-btn notes-btn-red" href="notes.html" title="AI Notes Generator">📓 Notes</a>
+
+        <div class="user-pill" id="user-pill" onclick="toggleMenuDropdown(event)" style="cursor:pointer"
+          title="User Menu">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <span class="user-name" id="user-name">Guest</span>
+          <span class="dropdown-caret">▼</span>
+        </div>
+
+        <div class="menu-dropdown" id="menu-dropdown">
+          <div class="dropdown-user-info">
+            <div class="user-avatar" id="dropdown-avatar">?</div>
+            <div class="dropdown-user-detail">
+              <div class="dropdown-user-name" id="dropdown-name">Guest</div>
+              <div class="dropdown-user-email" id="dropdown-email">guest@example.com</div>
+            </div>
+          </div>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item mobile-only" onclick="saveSession()">📌 Save Session</button>
+          <button class="dropdown-item mobile-only" onclick="clearChat()">🗑 Clear Chat</button>
+          <button class="dropdown-item mobile-only" onclick="toggleTheme()">☀️ Toggle Theme</button>
+          <button class="dropdown-item mobile-only" onclick="exportChat()">💾 Export Chat</button>
+          <button class="dropdown-item mobile-only" onclick="printChat()">🖨 Print Chat</button>
+          <button class="dropdown-item mobile-only" onclick="openShortcuts()">⌨ Keyboard Shortcuts</button>
+          <a class="dropdown-item mobile-only notes-dropdown-item" href="notes.html" style="text-decoration:none;">📓 Smart Notes Generator</a>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item" onclick="closeAllDropdowns();openAboutModal()">ℹ️ About InsightDocs AI</button>
+          <div class="dropdown-divider"></div>
+          <button class="dropdown-item logout-btn-item" onclick="logout()">🚪 Sign Out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search bar -->
+    <div class="search-bar" id="search-bar">
+      <input class="search-input" id="search-input" placeholder="Search in chat…" oninput="searchChat(this.value)"
+        onkeydown="if(event.key==='Escape')toggleSearch();else if(event.key==='Enter'){event.preventDefault();navigateSearch(event.shiftKey?-1:1);}" />
+      <span class="search-count" id="search-count"></span>
+      <button class="search-nav" onclick="navigateSearch(-1)" title="Previous (Shift+Enter)">↑</button>
+      <button class="search-nav" onclick="navigateSearch(1)" title="Next (Enter)">↓</button>
+      <button class="search-close" onclick="toggleSearch()">✕</button>
+    </div>
+
+    <div class="messages-wrap">
+      <div class="messages" id="messages">
+        <div class="welcome" id="welcome">
+          <div class="welcome-glow">✦</div>
+          <div class="welcome-title">InsightDocs AI</div>
+          <div class="welcome-sub" id="welcome-desc">RAG-Powered Multi-Document Knowledge Assistant. Upload documents
+            and get instant AI-powered answers with page citations.</div>
+          <div class="welcome-chips">
+            <div class="chip" onclick="chipClick('Summarize this document')">📋 Summarize</div>
+            <div class="chip" onclick="chipClick('What are the key points?')">🔑 Key Points</div>
+            <div class="chip" onclick="chipClick('Explain the main topic')">💡 Explain</div>
+            <div class="chip" onclick="chipClick('List all important dates')">📅 Dates & Facts</div>
+          </div>
+        </div>
+      </div>
+      <button class="scroll-btn" id="scroll-btn" onclick="scrollToBottom()">↓</button>
+    </div>
+
+    <div class="input-area">
+      <div class="input-toolbar">
+        <!-- Row 1: Model / Language / Match -->
+        <div class="toolbar-row">
+          <div class="toolbar-group">
+            <span class="toolbar-label">🤖 Model</span>
+            <select class="toolbar-select" id="model-select" onchange="updateModelBadge()">
+              <option value="auto-fallback" selected>🚀 Auto Fallback</option>
+              <optgroup label="Primary Models">
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash ⭐️</option>
+                <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+              </optgroup>
+              <optgroup label="Backup Models">
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                <option value="gemma-4-26b-a4b-it">Gemma 4 26B</option>
+                <option value="gemma-4-31b-it">Gemma 4 31B</option>
+              </optgroup>
+              <optgroup label="Voice Models">
+                <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS</option>
+                <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS</option>
+              </optgroup>
+              <optgroup label="Groq Models">
+                <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
+              </optgroup>
+              <optgroup label="Experimental Live Models">
+                <option value="gemini-3-flash-live">Gemini 3 Flash Live</option>
+                <option value="gemini-2.5-flash-native-audio-dialog">Gemini 2.5 Flash Native Audio Dialog</option>
+                <option value="gemini-3.5-live-translate">Gemini 3.5 Live Translate</option>
+              </optgroup>
+            </select>
+          </div>
+          <div id="model-capability-note" style="font-size:11px;color:var(--text3);margin-top:6px;min-height:14px">
+          </div>
+          <div class="toolbar-divider"></div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">🌐 Lang</span>
+            <select class="toolbar-select" id="lang-select">
+              <option value="">English</option>
+              <option value="Telugu">Telugu</option>
+              <option value="Hindi">Hindi</option>
+              <option value="Tamil">Tamil</option>
+              <option value="French">French</option>
+              <option value="Spanish">Spanish</option>
+              <option value="German">German</option>
+              <option value="Arabic">Arabic</option>
+              <option value="Japanese">Japanese</option>
+            </select>
+          </div>
+          <div class="toolbar-divider"></div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">🎯 Match</span>
+            <select class="toolbar-select" id="temp-select" onchange="updateTemp(this.value)">
+              <option value="0.9">Creative</option>
+              <option value="0.6">Balanced</option>
+              <option value="0.3" selected>Precise (90%)</option>
+              <option value="0.05">Exact (100%)</option>
+            </select>
+          </div>
+          <div class="toolbar-divider"></div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">🔤 Size</span>
+            <select class="toolbar-select" id="font-select" onchange="setFontSize(this.value)">
+              <option value="13px">Small</option>
+              <option value="14px" selected>Normal</option>
+              <option value="16px">Large</option>
+              <option value="18px">XL</option>
+            </select>
+          </div>
+        </div>
+        <!-- Row 2: Response Style -->
+        <div class="toolbar-row">
+          <span class="toolbar-label">📝 Style</span>
+          <button class="style-btn active" id="style-normal" onclick="setStyle('normal')">Normal</button>
+          <button class="style-btn" id="style-short" onclick="setStyle('short')">Short</button>
+          <button class="style-btn" id="style-detailed" onclick="setStyle('detailed')">Detailed</button>
+          <button class="style-btn" id="style-bullets" onclick="setStyle('bullets')">• Bullets</button>
+        </div>
+      </div>
+
+      <div class="input-box">
+        <button class="icon-btn" id="toggle-toolbar-btn" onclick="toggleToolbar()" title="Toggle settings">⚙️</button>
+        <textarea id="input" placeholder="Ask anything about your documents…" rows="1" oninput="autoResize(this)"
+          onkeydown="handleKey(event)"></textarea>
+        <button class="icon-btn" id="mic-btn" onclick="toggleVoice()" title="Voice input">🎙</button>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">Enter=send · Shift+Enter=new line · Ctrl+F=search · ?=shortcuts</div>
+    </div>
+    <!-- Gemini Context Modal -->
+    <div class="modal-overlay" id="context-modal" onclick="if(event.target===this)closeContextModal()">
+      <div class="modal" style="max-width:800px;width:95%;max-height:85vh;overflow-y:auto">
+        <div class="modal-title">🔍 Current Gemini Prompt Context</div>
+        <div id="context-modal-metadata"
+          style="margin-top:8px;font-size:12px;color:var(--text3);display:flex;gap:12px;margin-bottom:12px">
+          <!-- Metadata will be rendered here -->
+        </div>
+        <pre id="context-modal-body"
+          style="margin-top:12px;background:var(--surface2);padding:12px;border-radius:6px;overflow-x:auto;white-space:pre-wrap;font-family:monospace;font-size:12px;color:var(--text);border:1px solid var(--border)"></pre>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="modal-close" style="flex:1" onclick="copyContextModal()">📋 Copy Context</button>
+          <button class="modal-close" style="flex:1;background:linear-gradient(135deg,#dc2626,#9f1239)"
+            onclick="closeContextModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="about-modal-overlay" id="about-modal" onclick="if(event.target===this)closeAboutModal()">
+      <div class="about-modal-box">
+        <div class="about-modal-header">
+          <div class="about-app-identity">
+            <div class="about-logo-icon">✦</div>
+            <div>
+              <div class="about-app-name">InsightDocs AI</div>
+              <div class="about-app-tagline">AI-Powered Document Intelligence</div>
+            </div>
+          </div>
+          <button class="about-modal-close" onclick="closeAboutModal()">✕</button>
+        </div>
+        <div class="about-modal-body">
+          <div class="about-dev-badge">
+            <div>
+              <div class="about-dev-label">Developed By</div>
+              <div class="about-dev-name">BSS</div>
+            </div>
+          </div>
+          <div>
+            <div class="about-section-title">Purpose</div>
+            <div class="about-purpose-text">An AI-powered document intelligence platform that enables users to upload
+              PDFs, extract information, generate summaries, perform semantic search, and ask natural language questions
+              about documents.</div>
+          </div>
+          <div>
+            <div class="about-section-title">Core Features</div>
+            <div class="about-feature-grid">
+              <div class="about-feature-pill"><span class="about-feature-icon">💬</span>PDF Chat</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">🔍</span>OCR Text Extraction</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">🤖</span>Gemini AI Integration</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">📚</span>RAG Retrieval</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">📄</span>Multi-Document Search</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">🧠</span>Semantic Retrieval</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">📋</span>Summarization</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">📌</span>Source Citations</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">🕓</span>Chat History</div>
+              <div class="about-feature-pill"><span class="about-feature-icon">☁️</span>Document Persistence</div>
+            </div>
+          </div>
+          <div>
+            <div class="about-section-title">Technology Stack</div>
+            <div class="about-tech-stack">
+              <span class="about-tech-tag">HTML</span>
+              <span class="about-tech-tag">CSS</span>
+              <span class="about-tech-tag">JavaScript</span>
+              <span class="about-tech-tag">Node.js</span>
+              <span class="about-tech-tag">MongoDB</span>
+              <span class="about-tech-tag">Gemini API</span>
+              <span class="about-tech-tag">Tesseract OCR</span>
+            </div>
+          </div>
+          <div class="about-version-row">
+            <span>Version</span><span class="about-version-val">1.0.0 — Internship Edition</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/core/app.js"></script>
+</body>
+
+</html>
